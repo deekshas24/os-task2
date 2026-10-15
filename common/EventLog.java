@@ -174,7 +174,10 @@ public final class EventLog {
     --bg:#f6f7f9; --panel:#fff; --text:#1d2330; --muted:#6b7280; --border:#dde1e7;
     --WAITING:#f59e0b; --HUNGRY:#ef4444; --READING:#3b82f6; --WRITING:#8b5cf6;
     --EATING:#10b981; --THINKING:#64748b; --DONE:#9ca3af; --IDLE:#cbd5e1;
+    --ACQUIRING_FORKS:#f97316; --RELEASING_FORKS:#06b6d4;
   }
+  /* ---- Round table (only shown when the log contains forks) ---- */
+  #table-svg { width:100%; max-width:360px; display:block; margin:0 auto 8px; }
   body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
   main { max-width:1100px; margin:0 auto; padding:16px; }
   h1 { font-size:1.4rem; margin:0 0 12px; }
@@ -226,7 +229,10 @@ public final class EventLog {
   <section><h2>Actors</h2><div id="actors"></div><div id="legend"></div></section>
 
   <!-- Shared resource (readers/writer counters) or fork ownership -->
-  <section><h2 id="resource-title">Shared resource</h2><div id="resource"></div></section>
+  <section><h2 id="resource-title">Shared resource</h2>
+    <!-- Round table drawn by drawTable() when forks are present -->
+    <svg id="table-svg" viewBox="0 0 300 300" hidden></svg>
+    <div id="resource"></div></section>
 
   <!-- Full event timeline; rows not yet replayed are faded -->
   <section><h2>Timeline</h2>
@@ -319,6 +325,7 @@ function render() {
       div.textContent = `Fork ${f}: ${owner ?? 'free'}`;
       res.appendChild(div);
     }
+    drawTable(n, latest, cur);
   } else {
     [['Active readers', cur ? cur.readers : 0], ['Writer active', cur ? (cur.writer ? 'YES' : 'no') : 'no']]
       .forEach(([label, val]) => {
@@ -340,6 +347,53 @@ function render() {
 
   document.getElementById('status').textContent =
     `Event ${pos} / ${EVENTS.length}` + (cur ? ` — t = ${cur.t} ms` : '');
+}
+
+// Draws a round table: philosopher i sits at angle i, fork i lies between philosopher i and i+1.
+// A held fork is drawn next to its owner and coloured; a free fork sits on the table, grey.
+function drawTable(n, latest, cur) {
+  const svg = document.getElementById('table-svg');
+  svg.hidden = false;
+  const NS = 'http://www.w3.org/2000/svg';
+  const C = 150;                                   // centre of the 300x300 viewBox
+  const el = (tag, attrs, text) => {               // small helper to create SVG elements
+    const e = document.createElementNS(NS, tag);
+    Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
+    if (text !== undefined) e.textContent = text;
+    svg.appendChild(e);
+    return e;
+  };
+  const at = (angle, r) => [C + r * Math.cos(angle), C + r * Math.sin(angle)];
+  const seatAngle = i => -Math.PI / 2 + (2 * Math.PI * i) / n;
+  // Philosophers are the actors sorted by name, so seat order matches their numbering.
+  const seats = actors.map(a => a.thread).sort();
+  svg.innerHTML = '';
+  el('circle', { cx: C, cy: C, r: 80, fill: '#e7d8c3', stroke: '#b59b78', 'stroke-width': 3 });
+
+  // Forks.
+  for (let f = 0; f < n; f++) {
+    const owner = cur ? cur.forks[f] : null;
+    let angle = seatAngle(f) + Math.PI / n;        // halfway between seat f and seat f+1
+    if (owner) {                                   // nudge a held fork towards its owner
+      const s = seats.indexOf(owner);
+      if (s >= 0) angle = seatAngle(s) + (s === f ? 0.35 : -0.35);
+    }
+    const [x1, y1] = at(angle, owner ? 70 : 45);
+    const [x2, y2] = at(angle, owner ? 98 : 72);
+    el('line', { x1, y1, x2, y2, stroke: owner ? '#b45309' : '#9ca3af', 'stroke-width': 6, 'stroke-linecap': 'round' });
+    const [tx, ty] = at(seatAngle(f) + Math.PI / n, 30);
+    el('text', { x: tx, y: ty, 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'font-size': 10, fill: '#6b7280' }, 'F' + f);
+  }
+
+  // Philosophers.
+  seats.forEach((name, i) => {
+    const e = latest[name];
+    const [x, y] = at(seatAngle(i), 125);
+    const c = el('circle', { cx: x, cy: y, r: 22, stroke: cur && cur.thread === name ? '#1d2330' : '#fff', 'stroke-width': 3 });
+    c.style.fill = e ? colourOf(e.state) : 'var(--IDLE)';
+    el('text', { x, y, 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'font-size': 10, fill: '#fff', 'font-weight': 600 },
+       name.replace(/^\\D*/, 'P'));
+  });
 }
 
 // Advances by one event; stops playback at the end.
