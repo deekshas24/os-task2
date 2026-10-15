@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Name** | _<Your Name>_ |
-| **USN** | _<Your USN>_ |
+| **Name** | Deeksha |
+| **USN** | NNM24IS063 |
 | **Course** | Operating Systems |
 
 Java implementations of two classic synchronization problems, each solved two ways (semaphores and
