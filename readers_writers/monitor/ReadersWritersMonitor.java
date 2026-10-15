@@ -151,7 +151,7 @@ public class ReadersWritersMonitor {
             for (int i = 0; i < iterations; i++) {
                 m.startRead();
                 // ===== CRITICAL SECTION (reader): read the shared resource =====
-                int seen = sharedValue;
+                // (the value read is logged by startRead() in the READING event)
                 pause();
                 // ===== END CRITICAL SECTION =====
                 m.endRead();
